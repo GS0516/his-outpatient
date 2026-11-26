@@ -58,3 +58,8 @@ class TemplateIn(ApiModel):
 
 class TriageIn(ApiModel):
     symptoms: str = Field(default="", max_length=1000)
+
+
+class AssistantIn(ApiModel):
+    patient_id: str | None = Field(default=None, max_length=32)
+    question: str = Field(default="", max_length=500)

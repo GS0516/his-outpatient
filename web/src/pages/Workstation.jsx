@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import Modal from '../components/Modal'
 
@@ -223,6 +223,7 @@ export default function Workstation({ user, onLogout }) {
         <nav className="side-nav">
           <button className="nav-item on"><span>▤</span><span className="label">门诊医生工作站</span></button>
           <button className="nav-item" onClick={() => setModal({ type: 'triage' })}><span>✚</span><span className="label">智能分诊助手</span></button>
+          <button className="nav-item" onClick={() => setModal({ type: 'assistant' })}><span>✧</span><span className="label">AI 病历助手</span></button>
           {!isDoctor && <button className="nav-item" onClick={() => openAudit()}><span>▦</span><span className="label">审计日志</span></button>}
           {!isDoctor && <button className="nav-item" onClick={() => setModal({ type: 'import' })}><span>⇪</span><span className="label">药品批量导入</span></button>}
         </nav>
@@ -434,6 +435,7 @@ export default function Workstation({ user, onLogout }) {
       {modal?.type === 'audit' && <AuditModal onClose={() => setModal(null)} />}
       {modal?.type === 'import' && <ImportModal onClose={() => setModal(null)} notify={notify} />}
       {modal?.type === 'triage' && <TriageModal onClose={() => setModal(null)} notify={notify} />}
+      {modal?.type === 'assistant' && <AssistantModal onClose={() => setModal(null)} notify={notify} sel={sel} />}
 
       {toast && (
         <div style={{ position: 'fixed', right: 18, top: 18, zIndex: 120, background: '#fff', border: '1px solid var(--line-2)', boxShadow: 'var(--shadow)', borderRadius: 10, padding: '10px 14px', fontSize: 13 }}
@@ -891,10 +893,100 @@ function TriageModal({ onClose, notify }) {
             <span className={'tag ' + (result.urgency === '急诊' ? 'tag-danger' : result.urgency === '尽快' ? 'tag-warn' : 'tag-ok')}>紧急程度：{result.urgency}</span>
           </div>
           <p className="small ink2" style={{ marginTop: 10, lineHeight: 1.8 }}>{result.notes}</p>
+          {result.reasons && result.reasons.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div className="tiny muted">判断依据</div>
+              <ul className="small ink2" style={{ margin: '4px 0 0 18px', lineHeight: 1.8 }}>
+                {result.reasons.map((r, i) => <li key={i}>{r}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="alert alert-warn" style={{ marginTop: 10 }}>{result.disclaimer}</div>
-          <div className="tiny muted">结果来源：{result.source}{result.source === 'fallback' ? '（AI 不可用，已降级）' : result.source === 'local-rule' ? '（本地规则库）' : '（大模型）'}</div>
+          <div className="tiny muted">结果来源：{result.source}{result.source === 'fallback' ? '（AI 不可用，已降级）' : result.source === 'local-rule' ? '（本地规则库）' : `（大模型${result.model ? ' · ' + result.model : ''}）`}</div>
         </div>
       )}
+    </Modal>
+  )
+}
+
+const ASSIST_QUICK = [
+  '当前用药有什么相互作用风险？',
+  '结合过敏史，哪些药不能用？',
+  '建议补充哪些检查？',
+  '复诊时重点问什么？',
+]
+
+function AssistantModal({ onClose, notify, sel }) {
+  const [text, setText] = useState('')
+  const [log, setLog] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState(null)
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    api.aiStatus().then(setStatus).catch(() => setStatus({ enabled: false }))
+  }, [])
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
+  }, [log, busy])
+
+  async function ask(input) {
+    const question = String(input ?? text).trim()
+    if (!question) return notify('请先输入问题', 'warn')
+    setText('')
+    setBusy(true)
+    setLog((l) => [...l, { role: 'q', text: question }])
+    try {
+      const r = await api.assistant(question, sel?.id)
+      setLog((l) => [...l, { role: 'a', text: r.answer, source: r.source, model: r.model }])
+    } catch (e) {
+      setLog((l) => [...l, { role: 'a', text: e.message, source: 'error' }])
+      notify(e.message, 'danger')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="AI 病历助手（大模型 · 只读辅助）" width={700} onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>关闭</button>
+        <button className="btn btn-primary" disabled={busy} onClick={() => ask()}>{busy ? '思考中…' : '发送'}</button></>}>
+      <div className="alert alert-warn">
+        <b>边界：</b>AI 只读患者资料、只做提示，不下诊断结论、不开处方、不给剂量医嘱；所有结论需医生判断。
+      </div>
+
+      <div className="flex gap8" style={{ alignItems: 'center', marginBottom: 8 }}>
+        <span className={'tag ' + (status && status.enabled ? 'tag-ok' : 'tag-warn')}>
+          {status === null ? '检测中…' : status.enabled ? `已接入 · ${status.model}` : '未接入（本地规则降级）'}
+        </span>
+        <span className="tiny muted">
+          {sel ? `上下文：${sel.name}（${sel.sex} ${sel.age} 岁，${sel.dept}）` : '未选择患者：仅按通用医学常识回答'}
+        </span>
+      </div>
+
+      <div ref={listRef} style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--line-2)', borderRadius: 10, padding: 10, background: '#fbfdff' }}>
+        {log.length === 0 && <div className="tiny muted">问点什么，例如「结合过敏史，哪些药不能用？」</div>}
+        {log.map((m, i) => (
+          <div key={i} style={{ marginBottom: 10 }}>
+            <div className="tiny muted">{m.role === 'q' ? '医生提问' : `AI 回答${m.source === 'llm' ? (m.model ? ` · ${m.model}` : ' · 大模型') : m.source === 'fallback' ? ' · 降级' : ''}`}</div>
+            <div className="small ink2" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{m.text}</div>
+          </div>
+        ))}
+        {busy && <div className="tiny muted">正在请求大模型…</div>}
+      </div>
+
+      <div className="flex gap6" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+        {ASSIST_QUICK.map((t) => (
+          <button key={t} className="btn btn-xs" disabled={busy} onClick={() => ask(t)}>{t}</button>
+        ))}
+      </div>
+
+      <textarea className="textarea" style={{ marginTop: 8 }} rows={3}
+        placeholder="向 AI 提问，可结合当前选中的患者…（Ctrl+Enter 发送）"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ask() } }} />
     </Modal>
   )
 }

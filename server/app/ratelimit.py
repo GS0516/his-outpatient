@@ -15,6 +15,7 @@ WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "900"))
 _lock = threading.Lock()
 _fails: dict[str, list[float]] = {}
 _locked: dict[str, float] = {}
+_hits: dict[str, list[float]] = {}
 
 
 def make_key(username: str, ip: str) -> str:
@@ -56,7 +57,24 @@ def reset(key: str) -> None:
         _locked.pop(key, None)
 
 
+def hit(key: str, limit: int, window: int) -> bool:
+    """通用滑动窗口限流：True 放行，False 超限。
+
+    用于大模型接口这类有成本的调用，避免单个账号把额度刷光。
+    """
+    now = time.monotonic()
+    with _lock:
+        stamps = [t for t in _hits.get(key, []) if now - t < window]
+        if len(stamps) >= limit:
+            _hits[key] = stamps
+            return False
+        stamps.append(now)
+        _hits[key] = stamps
+        return True
+
+
 def clear_all() -> None:  # 测试用
     with _lock:
         _fails.clear()
         _locked.clear()
+        _hits.clear()

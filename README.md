@@ -1,4 +1,4 @@
-﻿# 门诊医生工作站 · 第三章功能规范实现
+# 门诊医生工作站 · 第三章功能规范实现
 
 按《医院信息系统基本功能规范》**第三章**实现的完整前后端系统：
 **React + Vite** 前端、**FastAPI + SQLAlchemy + SQLite** 后端、**pytest** 测试、**Docker Compose** 部署、**GitHub Actions** CI。
@@ -99,7 +99,9 @@ docker compose up -d --build  # → http://localhost:8080
 | GET | `/api/dashboard` | 工作台统计 | 登录 |
 | GET | `/api/admin/audit` | 审计日志 | admin |
 | POST | `/api/admin/drugs/import` | 药品 CSV 导入（逐行校验） | admin |
-| POST | `/api/triage` | 智能分诊（固定 JSON + 降级 + 免责声明） | 登录 |
+| POST | `/api/triage` | 智能分诊（大模型 + 白名单收敛 + 降级 + 免责声明） | 登录 |
+| POST | `/api/assistant` | AI 病历/用药助手（只读、限流 20 次/5 分钟） | 登录 |
+| GET | `/api/ai/status` | 大模型接入状态（不含密钥） | 登录 |
 | GET | `/api/health` | 健康检查 | 公开 |
 
 交互式文档：<http://localhost:8000/docs>。
@@ -161,7 +163,7 @@ cd server && pytest -q          # 19 passed
 - **单镜像**：根目录 `Dockerfile` 先构建前端再把 `dist` 交给 FastAPI 托管，同域访问无 CORS，适合 Render 一键部署。
 - **镜像**：`server/Dockerfile`（python:3.12-slim + uvicorn + healthcheck）、`web/Dockerfile`（node 构建 → nginx）。
 - **编排**：`docker-compose.yml`，`web:8080 → api:8000`，SQLite 数据卷 `his_data`；`--profile postgres` 启用 PostgreSQL 16。
-- **环境变量**：`JWT_SECRET`、`DATABASE_URL`、`ALLOW_ORIGINS`、`AI_ENDPOINT/AI_KEY`，模板见 `.env.example`，`.env` 已 gitignore。
+- **环境变量**：`JWT_SECRET`、`DATABASE_URL`、`ALLOW_ORIGINS`、`AI_BASE_URL/AI_KEY/AI_MODEL`，模板见 `.env.example`，`.env` 已 gitignore。
 - **CI**（`.github/workflows/ci.yml`）：后端 pytest → 前端 pnpm 构建 → 明文密钥扫描 → 构建两个镜像。
 - **上线建议**：`api` 部署 Render/Fly（或任意 VPS 的 compose），`web` 部署 Vercel/Netlify 或同机 nginx；`ALLOW_ORIGINS` 改成真实域名，`JWT_SECRET` 用 32 字节随机值。
 
@@ -188,7 +190,8 @@ cd server && pytest -q          # 19 passed
 ## 九、边界说明
 
 - 库存扣减/收费/发药属于第十、十二章，本期不含；`POST /api/visits` 只生成“待收费处方”并传送。
-- 智能分诊默认走本地规则；配置 `AI_ENDPOINT` 后才调用大模型，失败/超时自动降级，界面固定展示免责声明。
+- 智能分诊与 AI 助手默认走本地规则；配置 `AI_BASE_URL` + `AI_KEY` 后自动调用大模型，
+  失败/超时/输出不合规一律降级，界面固定展示免责声明与结果来源（大模型 / 本地规则 / 降级）。
 - 演示数据在容器卷或 `server/data/his.db`；删除该文件即可重建种子数据。
 - `legacy/` 为早期纯静态版本，仅留档，不参与构建、不对外提供。
 

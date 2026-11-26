@@ -57,4 +57,7 @@ export const api = {
     return request(`/api/admin/drugs/import?encoding=${encoding}`, { method: 'POST', form: fd })
   },
   triage: (symptoms) => request('/api/triage', { method: 'POST', body: { symptoms } }),
+  aiStatus: () => request('/api/ai/status'),
+  assistant: (question, patientId) =>
+    request('/api/assistant', { method: 'POST', body: { question, patientId: patientId || null } }),
 }
