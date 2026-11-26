@@ -38,13 +38,18 @@ table { border-collapse: collapse; width: 100%; }
 .btn {
   height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line-2);
   background: #fff; color: var(--ink-2); font-size: 13px; font-weight: 500;
-  display: inline-flex; align-items: center; gap: 6px; transition: .18s;
+  display: inline-flex; align-items: center; justify-content: center; text-align: center; gap: 6px; transition: .18s;
   box-shadow: 0 1px 2px rgba(16, 42, 74, .04);
 }
 .btn:hover { background: #f4f8fd; border-color: #b9cbe0; color: var(--ink); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: linear-gradient(135deg, #0f9d92, #0b7fd0 55%, #2563eb); border: 0; color: #fff; font-weight: 600; }
-.btn-primary:hover { filter: brightness(1.05); color: #fff; }
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0f9d92, #0b7fd0 55%, #2563eb);
+  border: 0; color: #fff; filter: brightness(1.07);
+}
+.btn-danger:hover { background: #fbe7e7; border-color: #e9a9a9; color: #a5323c; }
+.btn-ok:hover { background: #e2f6ee; border-color: #a9dcc8; color: #0a6b51; }
 .btn-sm { height: 30px; padding: 0 11px; font-size: 12px; }
 .btn-xs { height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 7px; }
 .btn-danger { background: #fdf2f2; border-color: #f3c7c7; color: #b93b3b; }
@@ -308,5 +313,6 @@ body { min-height: 100dvh; }
   .q-item { flex-basis: 170px; }
   .login-card { padding: 18px 14px; }
 }
+
 
 

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UI 自检</title>
+<style>body{margin:0;font:13px/1.7 Consolas,monospace;background:#f6f9fd;color:#12243a}pre{padding:12px;white-space:pre-wrap}iframe{position:absolute;left:-9999px;width:1200px;height:900px;border:0}</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async function () {
+  const out = []
+  const log = s => { out.push(s); document.getElementById('out').textContent = out.join('\n') }
+  const wait = ms => new Promise(r => setTimeout(r, ms))
+  localStorage.removeItem('his.token')
+  const f = document.createElement('iframe'); f.src = '/'; document.body.appendChild(f)
+  await wait(2000)
+  const d = f.contentDocument
+  const btn = [...d.querySelectorAll('button')].find(b => b.textContent.includes('登'))
+  if (!btn) { log('未找到登录按钮'); return }
+  const cs = f.contentWindow.getComputedStyle(btn)
+  const br = btn.getBoundingClientRect()
+  log('按钮: ' + Math.round(br.width) + '×' + Math.round(br.height) + '  display=' + cs.display + ' justify=' + cs.justifyContent + ' align=' + cs.alignItems)
+  log('文字对齐: text-align=' + cs.textAlign + ' line-height=' + cs.lineHeight)
+
+  // 用 Range 量文字实际位置
+  const range = d.createRange(); range.selectNodeContents(btn)
+  const tr = range.getBoundingClientRect()
+  const dx = ((tr.left + tr.right) / 2) - ((br.left + br.right) / 2)
+  const dy = ((tr.top + tr.bottom) / 2) - ((br.top + br.bottom) / 2)
+  log('文字中心偏移: x=' + dx.toFixed(1) + 'px y=' + dy.toFixed(1) + 'px  → ' + (Math.abs(dx) < 2 && Math.abs(dy) < 2 ? '居中' : '未居中'))
+
+  // 检查 hover 规则
+  let hover = null
+  for (const sheet of [...d.styleSheets]) {
+    let rules
+    try { rules = sheet.cssRules } catch (e) { continue }
+    for (const r of [...rules]) {
+      if (r.selectorText && r.selectorText.includes('.btn-primary:hover')) hover = r
+    }
+  }
+  log('hover 规则: ' + (hover ? hover.cssText : '未找到'))
+  const bg = hover && hover.style.background
+  const color = hover && hover.style.color
+  log('hover 背景=' + (bg || '(继承)') + '  文字=' + (color || '(继承)') + '  → ' + (bg && color === 'rgb(255, 255, 255)' ? '白字+渐变底 OK' : '需检查'))
+})()
+</script>
+</body>
+</html>
