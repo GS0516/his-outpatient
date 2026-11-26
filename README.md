@@ -1,4 +1,14 @@
-﻿# 门诊医生工作站 · 第三章功能规范实现
+---
+title: 门诊医生工作站
+emoji: 🏥
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
+# 门诊医生工作站 · 第三章功能规范实现
 
 按《医院信息系统基本功能规范》**第三章**实现的完整前后端系统：
 **React + Vite** 前端、**FastAPI + SQLAlchemy + SQLite** 后端、**pytest** 测试、**Docker Compose** 部署、**GitHub Actions** CI。
