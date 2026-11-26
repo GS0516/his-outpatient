@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -51,10 +51,12 @@
   log('[登录页] 表单宽度=' + (loginCard ? Math.round(loginCard.getBoundingClientRect().width) : '缺失') + 'px')
   f1.remove()
 
-  /* 2. 登录后再测工作台 */
+  /* 2. 登录后再测工作台（口令由 ?p= 传入，页面不内置） */
+  const demoPw = new URLSearchParams(location.search).get('p') || ''
+  if (!demoPw) { log('未提供 ?p=<密码>，跳过登录态检查'); return }
   const res = await fetch('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'doctor', password: 'Doctor@123' })
+    body: JSON.stringify({ username: 'doctor', password: demoPw })
   })
   if (!res.ok) { log('登录失败 ' + res.status); return }
   localStorage.setItem('his.token', (await res.json()).token)

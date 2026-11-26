@@ -201,7 +201,7 @@ export default function Home({ user, onStart }) {
 
       <footer className="hp-foot">
         <span>© 2026 门诊医生工作站</span>
-        <span className="hp-muted">医生 doctor / Doctor@123 · 管理员 admin / Admin@123</span>
+        <span className="hp-muted">演示口令不随前端下发，请向系统管理员索取</span>
       </footer>
     </div>
   )

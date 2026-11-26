@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import { api, setToken } from '../api'
 
-const DEMO = [
-  { u: 'doctor', p: 'Doctor@123', name: '医生 · 陈志远' },
-  { u: 'admin', p: 'Admin@123', name: '管理员 · 王建国' },
-]
+// 演示口令只在本地开发构建里存在：生产构建（vite build）时 import.meta.env.DEV 为 false，
+// 打出来的 JS 不含任何口令，避免把线上账号口令随静态资源公开。
+const DEMO = import.meta.env.DEV
+  ? [
+      { u: 'doctor', p: 'Doctor@123', name: '医生 · 陈志远' },
+      { u: 'admin', p: 'Admin@123', name: '管理员 · 王建国' },
+    ]
+  : [
+      { u: 'doctor', p: '', name: '医生 · 陈志远' },
+      { u: 'admin', p: '', name: '管理员 · 王建国' },
+    ]
 
 export default function Login({ onLogin, onHome }) {
   const [username, setUsername] = useState('')
@@ -22,7 +29,8 @@ export default function Login({ onLogin, onHome }) {
       setToken(data.token)
       onLogin(data)
     } catch (err) {
-      setError(err.status === 403 ? err.message : '用户名或密码错误（401）')
+      if (err.status === 429 || err.status === 403) setError(err.message)
+      else setError('用户名或密码错误')
       setPassword('')
     } finally {
       setBusy(false)
@@ -65,17 +73,21 @@ export default function Login({ onLogin, onHome }) {
           <button className="btn btn-primary" style={{ width: '100%', height: 42 }} disabled={busy}>{busy ? '登录中…' : '登 录'}</button>
 
           <div className="demo">
-            <div className="demo-title">演示账号（点击填入）</div>
+            <div className="demo-title">演示账号（点击填入用户名）</div>
             <div className="demo-grid">
               {DEMO.map((d) => (
                 <button type="button" key={d.u} className="demo-item"
-                  onClick={() => { setUsername(d.u); setPassword(d.p); setError('') }}>
+                  onClick={() => {
+                    setUsername(d.u)
+                    setPassword(d.p)
+                    setError(d.p ? '' : '演示口令不随页面下发，请输入管理员提供的密码')
+                  }}>
                   <b>{d.name}</b><span>{d.u}</span>
                 </button>
               ))}
             </div>
             <p className="tiny muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
-              口令以 bcrypt 哈希存储，仓库内无明文；医生可接诊开方，管理员只读查阅。
+              口令以 bcrypt 哈希存储，仓库与前端产物内均无明文；医生可接诊开方，管理员只读查阅。
             </p>
           </div>
         </form>

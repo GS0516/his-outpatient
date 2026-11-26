@@ -5,10 +5,13 @@
 <pre id="out">logging in…</pre>
 <script>
   // 仅用于本地/CI 的端到端冒烟：登录后把令牌写入 localStorage 再跳转
+  // 口令不内置，必须由调用方传入：/e2e-login.html?u=doctor&p=<密码>
   const params = new URLSearchParams(location.search)
   const username = params.get('u') || 'doctor'
-  const password = params.get('p') || 'Doctor@123'
-  fetch('/api/auth/login', {
+  const password = params.get('p') || ''
+  if (!password) {
+    document.getElementById('out').textContent = '请在地址后附 ?u=<用户名>&p=<密码>；页面不再内置任何口令。'
+  } else fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
