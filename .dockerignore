@@ -1,0 +1,15 @@
+# 构建上下文裁剪：只保留镜像需要的文件
+.git
+.github
+legacy
+docs
+node_modules
+**/node_modules
+.venv
+**/__pycache__
+**/*.pyc
+web/dist
+server/data
+*.db
+*.log
+tests

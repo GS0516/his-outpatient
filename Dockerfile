@@ -21,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server/app ./app
 COPY --from=webbuild /web/dist ./static
 
+# Hugging Face / 普通容器都需要可写的数据目录
+RUN mkdir -p /data && chmod 1777 /data
+
 VOLUME ["/data"]
 EXPOSE 8000
 
