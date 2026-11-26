@@ -1,17 +1,14 @@
 import { useState } from 'react'
 import { api, setToken } from '../api'
 
-// 演示口令只在本地开发构建里存在：生产构建（vite build）时 import.meta.env.DEV 为 false，
-// 打出来的 JS 不含任何口令，避免把线上账号口令随静态资源公开。
-const DEMO = import.meta.env.DEV
-  ? [
-      { u: 'doctor', p: 'Doctor@123', name: '医生 · 陈志远' },
-      { u: 'admin', p: 'Admin@123', name: '管理员 · 王建国' },
-    ]
-  : [
-      { u: 'doctor', p: '', name: '医生 · 陈志远' },
-      { u: 'admin', p: '', name: '管理员 · 王建国' },
-    ]
+// 演示口令是否打进产物：
+//   - 本地开发（import.meta.env.DEV）默认开启
+//   - 生产构建默认关闭；演示部署可显式开启：VITE_DEMO_FILL=1 pnpm build
+const DEMO_FILL = import.meta.env.DEV || import.meta.env.VITE_DEMO_FILL === '1'
+const DEMO = [
+  { u: 'doctor', p: DEMO_FILL ? 'Doctor@123' : '', name: '医生 · 陈志远' },
+  { u: 'admin', p: DEMO_FILL ? 'Admin@123' : '', name: '管理员 · 王建国' },
+]
 
 export default function Login({ onLogin, onHome }) {
   const [username, setUsername] = useState('')
@@ -73,7 +70,7 @@ export default function Login({ onLogin, onHome }) {
           <button className="btn btn-primary" style={{ width: '100%', height: 42 }} disabled={busy}>{busy ? '登录中…' : '登 录'}</button>
 
           <div className="demo">
-            <div className="demo-title">演示账号（点击填入用户名）</div>
+            <div className="demo-title">演示账号（{DEMO_FILL ? '点击一键填入' : '点击填入用户名'}）</div>
             <div className="demo-grid">
               {DEMO.map((d) => (
                 <button type="button" key={d.u} className="demo-item"
