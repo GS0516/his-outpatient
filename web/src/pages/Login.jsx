@@ -34,7 +34,7 @@ export default function Login({ onLogin }) {
       <section className="login-brand">
         <div className="lb-logo">
           <span className="mark">＋</span>
-          <span>门诊医生工作站<small style={{ display: 'block', fontWeight: 400, fontSize: 10, letterSpacing: '.14em', color: 'var(--muted)' }}>CHAPTER 3 · HIS</small></span>
+          <span>门诊医生工作站<small style={{ display: 'block', fontWeight: 400, fontSize: 10, letterSpacing: '.14em', color: 'var(--muted)' }}>HIS · OUTPATIENT</small></span>
         </div>
         <div className="lb-main">
           <h1>从接诊到处方<br /><span>一张病历走完</span></h1>

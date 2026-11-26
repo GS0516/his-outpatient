@@ -243,7 +243,7 @@ export default function Workstation({ user, onLogout }) {
         <header className="top">
           <div className="crumb">工作台 / <b>门诊医生工作站</b></div>
           <div className="top-right">
-            <span className="tag tag-brand">第三章</span>
+            <span className="tag tag-brand">门诊</span>
             <span className="clock">{clock.toLocaleString('zh-CN', { hour12: false })}</span>
           </div>
         </header>
@@ -251,7 +251,7 @@ export default function Workstation({ user, onLogout }) {
         <main className="view">
           <div className="page-hd">
             <div>
-              <h1>门诊医生工作站 <span className="ver">第三章</span></h1>
+              <h1>门诊医生工作站</h1>
               <p>处理门诊记录、诊断、处方、治疗处置、卫生材料、检查、检验、手术与收入院申请；处方自动监测并提示合理用药，确认后不可更改。</p>
             </div>
             <div className="flex gap8">
