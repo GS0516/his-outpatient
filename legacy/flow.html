@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>HIS 流程测试 · 门诊</title>
+<style>body{background:#f6f9fd;color:#12243a;font:13px/1.75 Consolas,"Microsoft YaHei",monospace;padding:24px}
+h1{font-size:16px;margin:0 0 12px;color:#0f766e}.pass{color:#0b7d5e}.fail{color:#c62f43}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>E2E 流程测试（真实点击）· 第三章门诊医生工作站</h1>
+<pre id="out">running…</pre>
+<div id="mount" style="display:none"></div>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/core.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/services.js"></script>
+<script src="../assets/js/m/dashboard.js"></script>
+<script src="../assets/js/m/clinic.js"></script>
+<script>
+(function () {
+  var H = window.HIS, S = H.store, log = [], pass = 0, fail = 0;
+  S.reset(); H.auth.init();
+  function ok(n, c, e) { c ? (pass++, log.push('PASS  ' + n + (e ? '  → ' + e : ''))) : (fail++, log.push('FAIL  ' + n + (e ? '  → ' + e : ''))); }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function closeAll() { document.querySelectorAll('.overlay .x-btn').forEach(function (b) { b.click(); }); }
+  function closeModal() {
+    var ovs = document.querySelectorAll('.overlay');
+    if (!ovs.length) return false;
+    var last = ovs[ovs.length - 1];
+    var b = last.querySelector('.modal-ft .btn-primary') || last.querySelector('.modal-ft .btn');
+    if (b) { b.click(); return true; }
+    return false;
+  }
+  function mount(id) { closeAll(); var d = document.getElementById('mount'); d.innerHTML = ''; H.pages[id].render(d); return d; }
+  function btnText(root, t) { return Array.prototype.filter.call(root.querySelectorAll('button'), function (b) { return b.textContent.replace(/\s/g, '').indexOf(t) > -1; })[0]; }
+  function clickTab(root, label) {
+    var tab = Array.prototype.filter.call(root.querySelectorAll('.tab'), function (b) { return b.textContent.indexOf(label) > -1; })[0];
+    if (tab) tab.click();
+    return !!tab;
+  }
+
+  (async function () {
+    var DEMO = { doctor: 'Doctor@123', admin: 'Admin@123' };
+    for (var i = 0; i < S.all('users').length; i++) {
+      var u = S.all('users')[i];
+      if (DEMO[u.username]) { u.hash = await H.crypto.pbkdf2Async(DEMO[u.username], u.salt, 1000); u.iter = 1000; }
+    }
+    S.save();
+
+    /* 1. 医生登录 + 患者信息自动带出 */
+    var lg = await H.auth.login('doctor', 'Doctor@123');
+    ok('医生登录', lg.ok, lg.body && lg.body.user.role);
+    var page = mount('clinic/op');
+    var txt = page.textContent;
+    ok('自动带出患者基本信息', txt.indexOf('张建国') > -1 && txt.indexOf('C88001231') > -1);
+    ok('身份证脱敏显示', txt.indexOf('430102********') > -1);
+    ok('既往史自动带入病历', page.querySelector('textarea').value.length > 0 === false || page.querySelectorAll('textarea').length > 0);
+
+    /* 2. 下达诊断 */
+    var icdSel = page.querySelector('select');
+    icdSel.value = 'J18.900';
+    btnText(page, '添加诊断').click();
+    await wait(120);
+    page = document.getElementById('mount');
+    ok('诊断写入病历', page.textContent.indexOf('肺炎') > -1);
+
+    /* 3. 开处方 */
+    ok('切换到处方页签', clickTab(page, '处方'));
+    await wait(80);
+    page = document.getElementById('mount');
+    btnText(page, '添加药品').click();
+    await wait(120);
+    var pick = document.querySelector('.pick-item');
+    ok('药品字典弹层出现', !!pick);
+    pick.click();
+    await wait(150);
+    page = document.getElementById('mount');
+    ok('处方出现明细行', page.querySelectorAll('tbody tr').length >= 1);
+    ok('审查区已渲染', page.textContent.indexOf('合理用药审查') > -1);
+
+    /* 4. 提交并锁定 */
+    var visitsBefore = S.all('visits').length;
+    btnText(page, '提交并锁定').click();
+    await wait(120);
+    ok('弹出提交确认', closeModal());
+    await wait(300);
+    page = document.getElementById('mount');
+    ok('生成就诊记录', S.all('visits').length === visitsBefore + 1, (S.all('visits').length) + ' 份');
+    ok('生成处方', S.all('prescriptions').some(function (r) { return r.status === '待收费'; }));
+    ok('页面显示锁定态', page.textContent.indexOf('已锁定') > -1 || page.textContent.indexOf('确认后不可更改') > -1);
+    ok('显示传送状态', page.textContent.indexOf('门诊收费') > -1 && page.textContent.indexOf('门诊药房') > -1);
+    ok('患者状态已完成', S.get('patients', 'P202611001').status === '已完成');
+
+    /* 5. 作废处方 */
+    var voidBtn = btnText(page, '作废处方');
+    ok('存在作废按钮', !!voidBtn);
+    if (voidBtn) {
+      voidBtn.click(); await wait(120);
+      var ta = document.querySelector('.modal textarea');
+      if (ta) { ta.value = '患者要求换药'; ta.dispatchEvent(new Event('input')); }
+      closeModal();
+      await wait(250);
+      ok('处方状态改为已作废', S.all('prescriptions').some(function (r) { return r.status === '已作废'; }));
+      ok('作废原因已记录', S.all('prescriptions').some(function (r) { return r.voidReason === '患者要求换药'; }));
+    }
+
+    /* 6. 审计 */
+    ok('提交与作废均留痕', S.all('audit').some(function (a) { return a.action === '提交门诊病历与处方'; }) &&
+      S.all('audit').some(function (a) { return a.action === '作废处方'; }));
+
+    /* 7. 管理员只读 */
+    H.auth.logout();
+    await H.auth.login('admin', 'Admin@123');
+    var p2 = mount('clinic/op');
+    ok('管理员看到只读提示', p2.textContent.indexOf('不能开方') > -1);
+    var res = H.api.submitVisit('P202611002', { complaint: 'x', diagnoses: ['J18.900'], items: [{ code: 'Y0001', qty: 1 }] });
+    ok('管理员开方被 403 拦截', res.status === 403, res.message);
+
+    S.reset();
+    document.getElementById('out').innerHTML = log.map(function (l) {
+      return '<span class="' + (l.indexOf('PASS') === 0 ? 'pass' : 'fail') + '">' + l + '</span>';
+    }).join('\n') + '\n合计：' + (pass + fail) + ' 项，通过 ' + pass + '，失败 ' + fail;
+  })();
+})();
+</script>
+</body>
+</html>

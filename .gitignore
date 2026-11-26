@@ -1,0 +1,28 @@
+﻿# 依赖
+node_modules/
+*.log
+
+# 环境与密钥：绝不入库
+.env
+.env.*
+!.env.example
+
+# 本地数据与构建产物
+dist/
+build/
+.venv/
+server/data/
+*.db
+web/node_modules/
+server/**/__pycache__/
+.pytest_cache/
+.DS_Store
+Thumbs.db
+*.local
+.vscode/
+.idea/
+
+# 测试临时文件
+tests/.cache/
+coverage/
+

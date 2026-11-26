@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>E2E 登录辅助</title></head>
+<body style="font-family:Consolas,monospace;padding:24px;background:#f6f9fd;color:#12243a">
+<pre id="out">logging in…</pre>
+<script>
+  // 仅用于本地/CI 的端到端冒烟：登录后把令牌写入 localStorage 再跳转
+  const params = new URLSearchParams(location.search)
+  const username = params.get('u') || 'doctor'
+  const password = params.get('p') || 'Doctor@123'
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  }).then(r => r.json().then(b => ({ ok: r.ok, b })))
+    .then(({ ok, b }) => {
+      if (!ok) { document.getElementById('out').textContent = 'LOGIN FAILED: ' + JSON.stringify(b); return }
+      localStorage.setItem('his.token', b.token)
+      document.getElementById('out').textContent = 'OK ' + b.user.name + ' / ' + b.user.role + ' → 跳转中'
+      location.replace('/')
+    })
+    .catch(e => { document.getElementById('out').textContent = 'ERROR ' + e.message })
+</script>
+</body>
+</html>

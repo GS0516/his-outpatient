@@ -1,0 +1,61 @@
+# ==========================================================================
+# HIS · 门诊医生工作站（web + api [+ 可选 PostgreSQL]）
+#   docker compose up -d --build          → http://localhost:8080
+#   docker compose --profile postgres up  → 使用 PostgreSQL（需在 .env 设 DATABASE_URL）
+# ==========================================================================
+services:
+  api:
+    build: ./server
+    container_name: his-api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/his.db}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-please-replace-with-32bytes}
+      ALLOW_ORIGINS: ${ALLOW_ORIGINS:-http://localhost:8080,http://localhost:5173}
+      AI_ENDPOINT: ${AI_ENDPOINT:-}
+      AI_KEY: ${AI_KEY:-}
+      AI_TIMEOUT: ${AI_TIMEOUT:-10}
+      TZ: Asia/Shanghai
+    volumes:
+      - his_data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build: ./web
+    container_name: his-web
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 可选：使用 PostgreSQL 时启用（--profile postgres），并把 .env 的 DATABASE_URL 指向 db
+  db:
+    image: postgres:16-alpine
+    container_name: his-db
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-his}
+      POSTGRES_USER: ${POSTGRES_USER:-his}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-his_dev_password}
+      TZ: Asia/Shanghai
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-his} -d ${POSTGRES_DB:-his}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  his_data:
+  pg_data:

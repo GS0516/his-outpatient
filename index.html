@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>门诊医生工作站 · 启动说明</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;font:14px/1.7 "Microsoft YaHei",-apple-system,sans-serif;
+       background:radial-gradient(900px 500px at 88% -10%,#e2ecfd,transparent 60%),radial-gradient(700px 460px at 4% 106%,#e3f5f1,transparent 60%),#f2f7fc;color:#0f1e33}
+  .box{width:min(560px,92vw);background:#fff;border:1px solid #e3eaf3;border-radius:18px;padding:30px 32px;box-shadow:0 30px 70px -40px rgba(16,42,74,.35)}
+  h1{font-size:20px;margin:0 0 6px}
+  .sub{color:#6b7c93;font-size:12.5px;margin:0 0 18px}
+  code,kbd{font-family:Consolas,monospace;background:#f4f8fd;border:1px solid #e3eaf3;border-radius:6px;padding:1px 6px;font-size:12.5px}
+  ol{padding-left:20px;margin:0 0 16px}
+  li{margin:6px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  a.btn{display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:9px;text-decoration:none;font-size:13px;border:1px solid #cdd9e8;color:#3d5169;background:#fff}
+  a.primary{background:linear-gradient(135deg,#0f9d92,#2563eb);border:0;color:#fff;font-weight:600}
+  .note{margin-top:16px;font-size:11.5px;color:#6b7c93;border-top:1px dashed #dbe6f2;padding-top:12px}
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>门诊医生工作站 · 第三章</h1>
+    <p class="sub">React + Vite 前端 · FastAPI + SQLite 后端</p>
+    <ol>
+      <li>启动后端（端口 8000）：<br><code>cd server &amp;&amp; uvicorn app.main:app --reload</code></li>
+      <li>启动前端（端口 5173，自动代理 /api）：<br><code>cd web &amp;&amp; pnpm install &amp;&amp; pnpm dev</code></li>
+      <li>浏览器访问 <code>http://localhost:5173</code>，用 <code>doctor / Doctor@123</code> 登录</li>
+    </ol>
+    <p class="sub" style="margin:0">或使用容器：<code>docker compose up -d --build</code> → <code>http://localhost:8080</code></p>
+    <div class="row">
+      <a class="btn primary" href="http://localhost:5173" target="_blank" rel="noreferrer">开发模式（5173）</a>
+      <a class="btn" href="http://localhost:8080" target="_blank" rel="noreferrer">容器模式（8080）</a>
+      <a class="btn" href="README.md">使用说明</a>
+    </div>
+    <div class="note">本页只是启动引导；真正的应用在 <code>web/</code>（前端）与 <code>server/</code>（后端）。旧版纯静态实现已归档到 <code>legacy/</code>，不参与构建。</div>
+  </div>
+</body>
+</html>

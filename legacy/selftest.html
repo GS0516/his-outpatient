@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>HIS 自检 · 第三章</title>
+<style>
+  body{background:#f6f9fd;color:#12243a;font:13px/1.75 Consolas,"Microsoft YaHei",monospace;padding:24px}
+  h1{font-size:16px;margin:0 0 12px;color:#0f766e}
+  .pass{color:#0b7d5e}.fail{color:#c62f43}
+  pre{white-space:pre-wrap;margin:0}
+  .sum{margin-top:14px;padding-top:12px;border-top:1px solid #dbe6f2;font-weight:700}
+</style>
+</head>
+<body>
+<h1>自检报告 · 门诊医生工作站（第三章）</h1>
+<pre id="out">running…</pre>
+<script>
+  window.addEventListener('error', function (e) {
+    var el = document.getElementById('out');
+    if (el && el.textContent === 'running…') el.textContent = 'JS ERROR: ' + e.message + ' @ ' + (e.filename || '').split('/').pop() + ':' + e.lineno;
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var el = document.getElementById('out');
+    if (el && el.textContent === 'running…') el.textContent = 'PROMISE REJECTED: ' + (e.reason && e.reason.message ? e.reason.message : e.reason);
+  });
+</script>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/core.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/services.js"></script>
+<script src="../assets/js/m/dashboard.js"></script>
+<script src="../assets/js/m/clinic.js"></script>
+<script>
+(function () {
+  var H = window.HIS, S = H.store, out = [], pass = 0, fail = 0;
+  S.reset(); H.auth.init();
+  function ok(n, c, e) { c ? (pass++, out.push('[PASS] ' + n + (e ? '  → ' + e : ''))) : (fail++, out.push('[FAIL] ' + n + (e ? '  → ' + e : ''))); }
+  function login(u, p) { return H.auth.login(u, p); }
+  function render(id) {
+    var div = document.createElement('div'), err = null;
+    try { H.pages[id].render(div); } catch (e) { err = e.message; }
+    return { html: div.innerHTML, err: err };
+  }
+
+  (async function () {
+    var DEMO = { doctor: 'Doctor@123', admin: 'Admin@123' };
+    for (var i = 0; i < S.all('users').length; i++) {
+      var u = S.all('users')[i];
+      if (DEMO[u.username]) { u.hash = await H.crypto.pbkdf2Async(DEMO[u.username], u.salt, 1000); u.iter = 1000; }
+    }
+    S.save();
+
+    /* 1. 算法与认证 */
+    ok('SHA-256 实现正确', H.crypto.sha256('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    var bad = await login('doctor', 'x');
+    ok('错误口令返回 401', bad.status === 401, bad.status);
+    var doc = await login('doctor', 'Doctor@123');
+    ok('医生登录成功并签发角色令牌', doc.ok && H.auth.session.role === 'doctor', doc.body && doc.body.user.role);
+    ok('令牌被篡改后失效', (function () {
+      var t = H.auth.session.token, old = sessionStorage.getItem('his.token');
+      sessionStorage.setItem('his.token', t.split('.')[0] + '.deadbeef');
+      var r = H.auth.restore();
+      sessionStorage.setItem('his.token', old); H.auth.restore();
+      return r === null;
+    })());
+
+    /* 2. 权限 */
+    ok('医生可进门诊站', H.auth.canRoute('clinic/op') && H.auth.can('prescribe'));
+    await login('admin', 'Admin@123');
+    ok('管理员不可开方', !H.auth.can('prescribe'));
+    var denied = H.api.submitVisit('P202611001', { complaint: 'x', diagnoses: ['J18.900'], items: [{ code: 'Y0001', qty: 1 }] });
+    ok('管理员提交病历返回 403', denied.status === 403, denied.message);
+    ok('管理员可看审计', H.auth.can('viewAudit'));
+
+    /* 3. 划价 */
+    await login('doctor', 'Doctor@123');
+    var pr = H.api.price([{ kind: 'drug', code: 'Y0001', qty: 2, price: 0.01 }]);
+    ok('前端传 0.01 被忽略，按档案价', pr.total === 37, '合计 ' + pr.total);
+    var badQty = H.api.price([{ kind: 'drug', code: 'Y0001', qty: 0 }]);
+    ok('数量为 0 被拒', !badQty.ok && badQty.errors.length === 1);
+    var mix = H.api.price([{ kind: 'drug', code: 'Y0009', qty: 1 }, { kind: 'treat', code: 'T03', qty: 2 }, { kind: 'material', code: 'M02', qty: 5 }]);
+    ok('药品+处置+材料混合计价', mix.ok && mix.total === 26.5 + 44 + 6, '合计 ' + mix.total);
+
+    /* 4. 完整性校验 */
+    var noDiag = H.api.submitVisit('P202611001', { complaint: '咳嗽', diagnoses: [], items: [{ code: 'Y0001', qty: 1 }] });
+    ok('无诊断被拒 400', noDiag.status === 400, noDiag.message);
+    var noItem = H.api.submitVisit('P202611001', { complaint: '咳嗽', diagnoses: ['J18.900'], items: [] });
+    ok('无明细被拒 400', noItem.status === 400, noItem.message);
+    var noComplaint = H.api.submitVisit('P202611001', { complaint: '', diagnoses: ['J18.900'], items: [{ code: 'Y0001', qty: 1 }] });
+    ok('无主诉被拒 400', noComplaint.status === 400);
+
+    /* 5. 提交 */
+    var before = S.all('visits').length;
+    var sub = H.api.submitVisit('P202611001', {
+      complaint: '咳嗽咳痰 5 天，发热 1 天', present: '受凉后起病', past: '高血压 10 年',
+      exam: '双肺呼吸音粗', diagnoses: ['J18.900'], note: '多饮水，3 天后复诊',
+      items: [{ code: 'Y0002', qty: 2, usage: '静滴 2g 每日一次' }, { code: 'Y0009', qty: 1, usage: '口服 10ml 每日三次' }],
+      treatments: [{ code: 'T03', qty: 1 }], materials: [{ code: 'M02', qty: 2 }],
+      labs: ['L01', 'L05'], exams: [{ item: '胸部正位DR', part: '胸部' }]
+    });
+    ok('提交成功', sub.ok, sub.ok ? sub.body.visit.id : sub.message);
+    ok('生成就诊记录', S.all('visits').length === before + 1);
+    ok('生成处方并置待收费', !!sub.body.prescription && sub.body.prescription.status === '待收费');
+    ok('金额 = 药品+处置+材料', sub.body.visit.total === 32.8 * 2 + 26.5 + 22 + 2.4, '合计 ' + sub.body.visit.total);
+    ok('诊断写入病历', /肺炎/.test(sub.body.visit.diagnosis), sub.body.visit.diagnosis);
+    ok('检验申请已传送', sub.body.labs.length === 2 && sub.body.labs[0].status === '待采样');
+    ok('检查申请已传送', sub.body.exams.length === 1 && sub.body.exams[0].part === '胸部');
+    ok('患者状态转为已完成', S.get('patients', 'P202611001').status === '已完成');
+    ok('提交写入审计', S.all('audit').some(function (a) { return a.action === '提交门诊病历与处方'; }));
+
+    /* 6. 作废 */
+    var rx = sub.body.prescription;
+    var v1 = H.api.voidPrescription(rx.id, '患者要求改用外院处方');
+    ok('作废处方成功', v1.ok && S.get('prescriptions', rx.id).status === '已作废', v1.message);
+    ok('作废写入审计', S.all('audit').some(function (a) { return a.action === '作废处方' && a.objectId === rx.id; }));
+    var v2 = H.api.voidPrescription(rx.id, '再次作废');
+    ok('重复作废返回 409', v2.status === 409, v2.message);
+
+    /* 7. 模板 */
+    var t1 = H.api.saveTemplate('自检模板', [{ code: 'Y0007', qty: 1, usage: '必要时' }], '测试');
+    ok('保存医嘱模板', t1.ok && S.all('templates').some(function (t) { return t.name === '自检模板'; }));
+    ok('模板按科室可查', H.api.templates('内科').length > 0);
+    var t2 = H.api.removeTemplate(t1.body.id);
+    ok('删除本人模板', t2.ok && !S.get('templates', t1.body.id));
+
+    /* 8. 历史与趋势 */
+    var h = H.api.history('P202611001');
+    ok('历史就诊包含本次与既往', h.visits.length >= 3, h.visits.length + ' 次');
+    var tr = H.api.trend('P202611001', 'L01');
+    ok('检验结果趋势可比较', tr.length >= 2, tr.map(function (x) { return x.date + ':' + x.v; }).join(' → '));
+
+    /* 9. 页面渲染 */
+    ok('页面注册（2 页）', Object.keys(H.pages).length === 2, Object.keys(H.pages).join(','));
+    ['dashboard', 'clinic/op'].forEach(function (id) {
+      var r = render(id);
+      ok('渲染 ' + id, !r.err && r.html.length > 300, r.err || r.html.length + ' 字符');
+    });
+    await login('admin', 'Admin@123');
+    var ro = render('clinic/op');
+    ok('管理员视角显示只读提示', ro.html.indexOf('不能开方') > -1);
+
+    document.getElementById('out').innerHTML = out.map(function (l) {
+      return '<span class="' + (l.indexOf('[PASS]') === 0 ? 'pass' : 'fail') + '">' + l + '</span>';
+    }).join('\n') + '\n<span class="sum">合计：' + (pass + fail) + ' 项，通过 ' + pass + '，失败 ' + fail + '</span>';
+  })();
+})();
+</script>
+</body>
+</html>

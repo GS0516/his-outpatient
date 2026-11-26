@@ -1,0 +1,31 @@
+# Render Blueprint：单服务（前端构建产物 + FastAPI）
+# 用法：Render 控制台 → New → Blueprint → 选择本仓库
+# 注意：
+#   1. 免费实例不能挂持久磁盘，SQLite 会在重启/重新部署后回到种子数据（演示可接受）
+#   2. 需要数据持久化时：升级到 Starter 并保留 disk 段，或改用 Render PostgreSQL（把 DATABASE_URL 指向它）
+services:
+  - type: web
+    name: his-outpatient
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free                 # 有磁盘需求改为 starter
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true    # Render 自动生成随机值
+      - key: DATABASE_URL
+        value: sqlite:////data/his.db
+      - key: ALLOW_ORIGINS
+        value: https://his-outpatient.onrender.com   # 部署后改成真实域名
+      - key: AI_ENDPOINT
+        sync: false
+      - key: AI_KEY
+        sync: false
+      - key: AI_TIMEOUT
+        value: "10"
+    # 免费实例不支持磁盘，需要持久化时取消注释并改用 starter
+    # disk:
+    #   name: his-data
+    #   mountPath: /data
+    #   sizeGB: 1
