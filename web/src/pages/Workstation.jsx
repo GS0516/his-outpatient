@@ -526,7 +526,7 @@ function RxTab({ draft, patch, dicts, review, drugByCode, openDrug, openTemplate
 
       {draft.items.length === 0 ? <div className="empty">尚未开具药品</div> : (
         <div style={{ overflow: 'auto' }}>
-          <table className="tbl">
+          <div className="table-wrap"><table className="tbl">
             <thead><tr><th>药品 / 规格</th><th style={{ width: 94 }}>单次剂量</th><th style={{ width: 118 }}>频次</th><th style={{ width: 66 }}>天数</th><th style={{ width: 66 }}>数量</th><th style={{ width: 84 }}>金额</th><th /></tr></thead>
             <tbody>
               {draft.items.map((it, idx) => {
@@ -553,7 +553,7 @@ function RxTab({ draft, patch, dicts, review, drugByCode, openDrug, openTemplate
                 )
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
@@ -570,7 +570,7 @@ function RxTab({ draft, patch, dicts, review, drugByCode, openDrug, openTemplate
 
 function TreatTab({ draft, patch, dicts, openTreat, openMaterial }) {
   const rows = (list, dict, key, kind) => (
-    <table className="tbl" style={{ marginBottom: 12 }}>
+    <div className="table-wrap"><table className="tbl" style={{ marginBottom: 12 }}>
       <tbody>
         {list.length === 0 && <tr><td className="muted small">未添加</td></tr>}
         {list.map((it, idx) => {
@@ -593,7 +593,7 @@ function TreatTab({ draft, patch, dicts, openTreat, openMaterial }) {
           )
         })}
       </tbody>
-    </table>
+    </table></div>
   )
   return (
     <div>
@@ -665,7 +665,7 @@ function HistoryTab({ history, dicts, patient }) {
     <div>
       <div className="small muted" style={{ marginBottom: 8 }}>历次就诊</div>
       {visits.length === 0 ? <div className="empty">暂无历史就诊</div> : (
-        <table className="tbl" style={{ marginBottom: 16 }}>
+        <div className="table-wrap"><table className="tbl" style={{ marginBottom: 16 }}>
           <thead><tr><th>日期</th><th>科室</th><th>诊断</th><th>费用</th><th>状态</th></tr></thead>
           <tbody>
             {visits.map((v) => (
@@ -676,7 +676,7 @@ function HistoryTab({ history, dicts, patient }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       <div className="between" style={{ marginBottom: 8 }}>
@@ -798,7 +798,7 @@ function AuditModal({ onClose }) {
         <span className="tiny muted">共 {rows.length} 条，按时间倒序</span>
       </div>
       <div style={{ maxHeight: 420, overflow: 'auto' }}>
-        <table className="tbl">
+        <div className="table-wrap"><table className="tbl">
           <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th></tr></thead>
           <tbody>
             {rows.map((r) => (
@@ -812,7 +812,7 @@ function AuditModal({ onClose }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </Modal>
   )
@@ -854,10 +854,10 @@ function ImportModal({ onClose, notify }) {
             <div className="kpi"><div className="l">重复跳过</div><div className="v" style={{ color: 'var(--warn)' }}>{result.duplicates.length}</div></div>
           </div>
           {result.failed.length > 0 && (
-            <table className="tbl">
+            <div className="table-wrap"><table className="tbl">
               <thead><tr><th>行号</th><th>原始内容</th><th>失败原因</th></tr></thead>
               <tbody>{result.failed.map((f) => <tr key={f.line}><td className="mono">{f.line}</td><td className="tiny">{f.raw}</td><td style={{ color: 'var(--danger)' }}>{f.reason}</td></tr>)}</tbody>
-            </table>
+            </table></div>
           )}
         </div>
       )}

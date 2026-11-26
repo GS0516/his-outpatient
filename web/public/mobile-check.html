@@ -1,0 +1,100 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>移动端适配自检</title>
+<style>
+  body{margin:0;font:13px/1.7 Consolas,monospace;background:#f6f9fd;color:#12243a}
+  pre{padding:12px;white-space:pre-wrap}
+  iframe{position:absolute;left:-9999px;width:390px;height:844px;border:0}
+</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async function () {
+  const W = Number(new URLSearchParams(location.search).get('w')) || 390
+  const out = []
+  const wait = (ms) => new Promise(r => setTimeout(r, ms))
+  const log = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n') }
+
+  function mount() {
+    const f = document.createElement('iframe')
+    f.style.cssText = 'width:' + W + 'px;height:844px;border:0;position:absolute;left:-9999px'
+    document.body.appendChild(f)
+    return f
+  }
+  function metrics(frame, label) {
+    const d = frame.contentDocument
+    const w = frame.contentWindow.innerWidth
+    const sw = d.documentElement.scrollWidth
+    const q = (s) => d.querySelector(s)
+    const cs = (s) => q(s) ? getComputedStyle(q(s)) : null
+    log(`[${label}] viewport=${w} scrollWidth=${sw} 横向溢出=${sw > w + 1 ? 'YES' : 'no'}`)
+    if (q('.side')) log(`[${label}] 侧栏高度=${Math.round(q('.side').getBoundingClientRect().height)}px 布局=${cs('.side').flexDirection}`)
+    if (q('.queue')) log(`[${label}] 患者队列 display=${cs('.queue').display} 高度=${Math.round(q('.queue').getBoundingClientRect().height)}px`)
+    if (q('.tbl')) {
+      const bd = q('.card-bd')
+      log(`[${label}] 表格宽=${Math.round(q('.tbl').getBoundingClientRect().width)}px 容器=${bd ? Math.round(bd.clientWidth) : '-'} 容器可横滚=${bd ? bd.scrollWidth > bd.clientWidth + 1 : '-'}`)
+    }
+    const btns = [...d.querySelectorAll('.btn')].map(b => b.getBoundingClientRect().height).filter(h => h > 0)
+    if (btns.length) log(`[${label}] 按钮最小高度=${Math.round(Math.min(...btns))}px`)
+    return sw <= w + 1
+  }
+
+  /* 1. 未登录 → 登录页 */
+  const f1 = mount(); f1.style.width = W + 'px'; f1.src = '/'
+  await wait(1800)
+  metrics(f1, '登录页')
+  const loginCard = f1.contentDocument.querySelector('.login-card')
+  log('[登录页] 表单宽度=' + (loginCard ? Math.round(loginCard.getBoundingClientRect().width) : '缺失') + 'px')
+  f1.remove()
+
+  /* 2. 登录后再测工作台 */
+  const res = await fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'doctor', password: 'Doctor@123' })
+  })
+  if (!res.ok) { log('登录失败 ' + res.status); return }
+  localStorage.setItem('his.token', (await res.json()).token)
+
+  const f2 = mount(); f2.src = '/'
+  await wait(2500)
+  const d2 = f2.contentDocument
+  const ok = metrics(f2, '工作台')
+  const tabs = [...d2.querySelectorAll('.tab')]
+  log('[debug] tabs=' + tabs.map(t => t.textContent.trim()).join(' | '))
+  const rxTab = tabs.find(t => t.textContent.trim().startsWith('处方'))
+  if (rxTab) { rxTab.click(); await wait(800) }
+  log('[debug] 处方页含添加按钮=' + d2.body.textContent.includes('添加药品'))
+  if (d2.querySelector('.tbl')) {
+    const bd = d2.querySelector('.card-bd')
+    log('[处方页] 表格宽=' + Math.round(d2.querySelector('.tbl').getBoundingClientRect().width) + 'px 容器=' + bd.clientWidth + ' scrollW=' + bd.scrollWidth + ' overflowX=' + getComputedStyle(bd).overflowX + ' class=' + bd.className)
+      bd.scrollLeft = 120; log('[处方页] 手动滚动后 scrollLeft=' + bd.scrollLeft)
+    log('[处方页] 页面横向溢出=' + (d2.documentElement.scrollWidth > d2.defaultView.innerWidth + 1 ? 'YES' : 'no'))
+  }
+  const addBtn = [...d2.querySelectorAll('button')].find(b => b.textContent.includes('添加药品'))
+  if (addBtn) {
+    addBtn.click(); await wait(700)
+    const mo = d2.querySelector('.modal')
+    log('[选药弹层] 宽=' + (mo ? Math.round(mo.getBoundingClientRect().width) : 0) + 'px 高=' + (mo ? Math.round(mo.getBoundingClientRect().height) : 0) + 'px 页面溢出=' + (d2.documentElement.scrollWidth > d2.defaultView.innerWidth + 1 ? 'YES' : 'no'))
+    const first = d2.querySelector('.pick')
+    if (first) { first.click(); await wait(900) }
+    if (d2.querySelector('.tbl')) {
+      const bd = d2.querySelector('.table-wrap')
+      log('[处方页] 表格宽=' + Math.round(d2.querySelector('.tbl').getBoundingClientRect().width) + 'px 容器=' + bd.clientWidth + 'px scrollW=' + bd.scrollWidth + ' 可横滚=' + (bd.scrollWidth > bd.clientWidth + 1))
+      log('[处方页] 页面横向溢出=' + (d2.documentElement.scrollWidth > d2.defaultView.innerWidth + 1 ? 'YES' : 'no'))
+      log('[处方页] 审查提示数=' + d2.querySelectorAll('.alert').length)
+    }
+  }
+  log('[工作台] 患者卡可见=' + (d2.querySelector('.pt-card') ? 'YES' : 'no'))
+  log('[工作台] 底部操作条按钮数=' + d2.querySelectorAll('.card .btn').length)
+  log('结论：' + (ok ? '无页面级横向溢出' : '存在横向溢出，需要继续调整'))
+
+  localStorage.removeItem('his.token')
+})()
+</script>
+</body>
+</html>
+
