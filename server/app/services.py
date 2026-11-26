@@ -1,4 +1,4 @@
-﻿"""业务规则：服务端划价、合理用药审查、诊断文本。金额只认数据库字典价。"""
+"""业务规则：服务端划价、合理用药审查、诊断文本。金额只认数据库字典价。"""
 from sqlalchemy.orm import Session
 
 from .catalog import ICD, INTERACTIONS
@@ -19,20 +19,38 @@ def lookup(db: Session, kind: str, code: str):
     return None
 
 
+MAX_QTY = 999          # 单行数量上限：避免 qty 取值把合计推到浮点溢出
+MAX_LINES = 150        # 单张处方明细行上限
+
+
 def price_entries(db: Session, entries) -> tuple[list[dict], float, list[dict]]:
-    """entries: [{kind, code, qty, usage}]；返回 (明细行, 合计, 错误)。忽略任何前端传入的价格。"""
+    """entries: [{kind, code, qty, usage}]；返回 (明细行, 合计, 错误)。忽略任何前端传入的价格。
+
+    数量在这里再做一次硬校验（schema 已有 Field 约束，但 price_entries 也会被
+    内部调用）：非整数、越界、超大值一律进 errors，不参与合计。
+    """
     lines, errors, total = [], [], 0.0
-    for i, e in enumerate(entries or []):
+    entries = list(entries or [])
+    if len(entries) > MAX_LINES:
+        errors.append({"index": -1, "code": "", "reason": f"明细行数超过上限 {MAX_LINES}"})
+        return lines, total, errors
+    for i, e in enumerate(entries):
         kind = getattr(e, "kind", None) or (e.get("kind") if isinstance(e, dict) else "drug") or "drug"
         code = getattr(e, "code", None) or (e.get("code") if isinstance(e, dict) else None)
-        qty = int(getattr(e, "qty", 1) if not isinstance(e, dict) else e.get("qty", 1))
+        raw_qty = getattr(e, "qty", 1) if not isinstance(e, dict) else e.get("qty", 1)
+        try:
+            qty = int(raw_qty)
+        except (TypeError, ValueError, OverflowError):
+            errors.append({"index": i, "code": code, "reason": "数量必须为整数"})
+            continue
         usage = getattr(e, "usage", "") if not isinstance(e, dict) else e.get("usage", "")
         obj = lookup(db, kind, code)
         if obj is None:
             errors.append({"index": i, "code": code, "reason": f"项目不存在：{code}"})
             continue
-        if qty <= 0:
-            errors.append({"index": i, "code": code, "reason": "数量必须为正整数"})
+        if qty <= 0 or qty > MAX_QTY:
+            errors.append({"index": i, "code": code,
+                           "reason": f"数量必须为 1–{MAX_QTY} 的整数（当前 {qty}）"})
             continue
         unit_price = float(obj.price)
         amount = money(unit_price * qty)

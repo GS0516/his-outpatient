@@ -1,8 +1,10 @@
 """门诊医生工作站 API（第三章）。"""
 from datetime import datetime
 from random import randint
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..catalog import EXAM_ITEMS, ICD, LAB_ITEMS
@@ -13,6 +15,37 @@ from ..security import audit, get_current_user, require_roles
 from ..services import diagnosis_text, money, price_entries, review
 
 router = APIRouter(prefix="/api", tags=["clinic"])
+
+
+# ---------------------------------------------------------------- 数据可见范围
+def scoped_patients(db: Session, user: User):
+    """按角色收敛患者可见范围（行级权限）。
+
+    - doctor：本科室患者 + 分派给本人的患者 + 尚未分派的公共队列
+    - admin ：只读全量（审计/管理需要），但无任何写权限（由 require_roles 保证）
+    - 其他角色：不可见
+    """
+    q = db.query(Patient)
+    if user.role == "admin":
+        return q
+    if user.role == "doctor":
+        return q.filter(or_(Patient.dept == user.dept,
+                            Patient.doctor == user.name,
+                            Patient.doctor == ""))
+    return q.filter(False)          # 其他角色：空集（当前模型只有 doctor/admin）
+
+
+def accessible_patient(db: Session, user: User, pid: str) -> Patient:
+    """越权与不存在统一返回 404，避免通过状态码枚举患者编号。"""
+    p = scoped_patients(db, user).filter(Patient.id == pid).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="患者不存在或不在您的接诊范围")
+    return p
+
+
+def new_suffix() -> str:
+    """毫秒级时间戳 + 随机段，避免同一秒内重复提交撞主键。"""
+    return f"{datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]}{uuid4().hex[:4]}"
 
 
 # ---------------------------------------------------------------- 序列化
@@ -85,7 +118,7 @@ def dicts(user: User = Depends(get_current_user), db: Session = Depends(get_db))
 
 @router.get("/patients")
 def patients(status: str | None = None, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    q = db.query(Patient)
+    q = scoped_patients(db, user)
     if status:
         q = q.filter(Patient.status == status)
     return [patient_dict(p) for p in q.order_by(Patient.id).all()]
@@ -93,14 +126,13 @@ def patients(status: str | None = None, user: User = Depends(get_current_user), 
 
 @router.get("/patients/{pid}")
 def patient(pid: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    p = db.get(Patient, pid)
-    if not p:
-        raise HTTPException(status_code=404, detail="患者不存在")
-    return patient_dict(p)
+    return patient_dict(accessible_patient(db, user, pid))
 
 
 @router.get("/patients/{pid}/history")
 def history(pid: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    patient_row = accessible_patient(db, user, pid)
+    pid = patient_row.id
     visits = db.query(Visit).filter(Visit.patient_id == pid).order_by(Visit.date.desc()).all()
     rxs = db.query(Prescription).filter(Prescription.patient_id == pid).all()
     labs = db.query(LabOrder).filter(LabOrder.patient_id == pid).all()
@@ -111,6 +143,7 @@ def history(pid: str, user: User = Depends(get_current_user), db: Session = Depe
 
 @router.get("/patients/{pid}/trend")
 def trend(pid: str, code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    accessible_patient(db, user, pid)
     points = []
     for lab in db.query(LabOrder).filter(LabOrder.patient_id == pid).all():
         for r in lab.results or []:
@@ -124,14 +157,14 @@ def trend(pid: str, code: str, user: User = Depends(get_current_user), db: Sessi
 # ---------------------------------------------------------------- 划价与审查（服务端）
 @router.post("/review")
 def review_items(payload: VisitIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    patient = db.get(Patient, payload.patient_id)
+    patient = accessible_patient(db, user, payload.patient_id)
     entries = list(payload.items) + list(payload.treatments) + list(payload.materials)
     for t in payload.treatments:
         t.kind = "treat"
     for m in payload.materials:
         m.kind = "material"
     lines, total, errors = price_entries(db, entries)
-    issues = review(db, patient, payload.items) if patient else []
+    issues = review(db, patient, payload.items)
     return {"lines": lines, "total": total, "errors": errors, "issues": issues}
 
 
@@ -139,9 +172,7 @@ def review_items(payload: VisitIn, user: User = Depends(get_current_user), db: S
 @router.post("/visits", status_code=201)
 def create_visit(payload: VisitIn, request: Request,
                  user: User = Depends(require_roles("doctor")), db: Session = Depends(get_db)):
-    patient = db.get(Patient, payload.patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="患者不存在")
+    patient = accessible_patient(db, user, payload.patient_id)
     if not payload.complaint.strip():
         raise HTTPException(status_code=400, detail="主诉不能为空")
     if not payload.diagnoses:
@@ -160,7 +191,7 @@ def create_visit(payload: VisitIn, request: Request,
         raise HTTPException(status_code=400, detail="明细有误：" + "；".join(e["reason"] for e in errors))
 
     stamp = datetime.now()
-    suffix = f"{stamp.strftime('%Y%m%d%H%M%S')}{randint(10, 99)}"
+    suffix = new_suffix()
     visit_id = "V" + suffix
     diag = diagnosis_text(payload.diagnoses)
 
@@ -219,6 +250,7 @@ def void_prescription(rx_id: str, payload: VoidIn, request: Request,
     rx = db.get(Prescription, rx_id)
     if not rx:
         raise HTTPException(status_code=404, detail="处方不存在")
+    accessible_patient(db, user, rx.patient_id)          # 非接诊范围 → 404，禁止跨科室作废
     if rx.status != "待收费":
         raise HTTPException(status_code=409, detail=f"该处方状态不允许作废：{rx.status}")
     rx.status = "已作废"
@@ -268,11 +300,17 @@ def delete_template(tid: str, request: Request,
 @router.get("/dashboard")
 def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = datetime.now().strftime("%Y-%m-%d")
+    ids = [row[0] for row in scoped_patients(db, user).with_entities(Patient.id).all()]
+    waiting = db.query(Patient).filter(Patient.id.in_(ids), Patient.status == "待诊").count() if ids else 0
+    done = db.query(Patient).filter(Patient.id.in_(ids), Patient.status == "已完成").count() if ids else 0
     return {
-        "waiting": db.query(Patient).filter(Patient.status == "待诊").count(),
-        "done": db.query(Patient).filter(Patient.status == "已完成").count(),
-        "visitsToday": db.query(Visit).filter(Visit.date == today).count(),
-        "rxPending": db.query(Prescription).filter(Prescription.status == "待收费").count(),
-        "labsPending": db.query(LabOrder).filter(LabOrder.status.in_(["待采样", "检验中"])).count(),
-        "examsPending": db.query(Exam).filter(Exam.status == "待检查").count(),
+        "waiting": waiting,
+        "done": done,
+        "visitsToday": db.query(Visit).filter(Visit.date == today, Visit.patient_id.in_(ids)).count() if ids else 0,
+        "rxPending": db.query(Prescription).filter(Prescription.patient_id.in_(ids),
+                                                   Prescription.status == "待收费").count() if ids else 0,
+        "labsPending": db.query(LabOrder).filter(LabOrder.patient_id.in_(ids),
+                                                 LabOrder.status.in_(["待采样", "检验中"])).count() if ids else 0,
+        "examsPending": db.query(Exam).filter(Exam.patient_id.in_(ids),
+                                              Exam.status == "待检查").count() if ids else 0,
     }

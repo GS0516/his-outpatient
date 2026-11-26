@@ -12,6 +12,9 @@ from ..security import audit, require_roles
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024          # CSV 上限 2MB，避免一次性读入超大文件
+MAX_IMPORT_LINES = 5000
+
 
 @router.get("/audit")
 def audit_logs(action: str | None = None, username: str | None = None, date: str | None = None,
@@ -23,7 +26,11 @@ def audit_logs(action: str | None = None, username: str | None = None, date: str
     if username:
         q = q.filter(AuditLog.username == username)
     if date:
-        q = q.filter(AuditLog.created_at >= datetime.strptime(date, "%Y-%m-%d"))
+        try:
+            day = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+        q = q.filter(AuditLog.created_at >= day)
     rows = q.order_by(AuditLog.id.desc()).limit(max(1, min(limit, 500))).all()
     return [{
         "id": r.id, "time": r.created_at.strftime("%Y-%m-%d %H:%M:%S"), "username": r.username,
@@ -36,6 +43,8 @@ def audit_logs(action: str | None = None, username: str | None = None, date: str
 async def import_drugs(request: Request, file: UploadFile = File(...), encoding: str = "utf-8",
                        user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
     raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"文件超过 {MAX_UPLOAD_BYTES // 1024 // 1024}MB 上限")
     try:
         text = raw.decode(encoding)
     except (LookupError, UnicodeDecodeError):
@@ -44,6 +53,8 @@ async def import_drugs(request: Request, file: UploadFile = File(...), encoding:
     lines = [l for l in text.replace("\r", "").split("\n") if l.strip()]
     if not lines:
         raise HTTPException(status_code=400, detail="文件为空")
+    if len(lines) > MAX_IMPORT_LINES:
+        raise HTTPException(status_code=413, detail=f"单次导入行数超过上限 {MAX_IMPORT_LINES}")
     has_header = any(k in lines[0] for k in ("通用名", "药品名称", "generic"))
     start = 1 if has_header else 0
 

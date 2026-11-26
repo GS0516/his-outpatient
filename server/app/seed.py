@@ -1,17 +1,47 @@
 """种子数据：用户、患者、药品/处置/材料字典、历史就诊、模板。"""
+import os
+import secrets
+
 from sqlalchemy.orm import Session
 
+from .config import IS_PROD
 from .models import Drug, Exam, LabOrder, Material, Patient, Template, Treatment, User, Visit
-from .security import hash_password
+from .security import hash_password, verify_password
+
+# 演示口令：仅用于开发/演示；生产由 SEED_* 环境变量注入，未注入则随机生成
+DEMO_PASSWORDS = {"doctor": "Doctor@123", "admin": "Admin@123"}
+
+
+def _initial_password(env_key: str, demo: str) -> str:
+    value = (os.getenv(env_key) or "").strip()
+    if value:
+        return value
+    if IS_PROD:
+        generated = secrets.token_urlsafe(15)
+        print(f"[seed] 未设置 {env_key}，已生成随机初始口令（仅本次打印）：{generated}")
+        return generated
+    return demo
+
+
+def weak_accounts(db: Session) -> list[str]:
+    """返回仍在使用演示口令的账号，供启动自检告警。"""
+    out: list[str] = []
+    for user in db.query(User).all():
+        demo = DEMO_PASSWORDS.get(user.username)
+        if demo and verify_password(demo, user.password_hash):
+            out.append(user.username)
+    return out
 
 
 def seed(db: Session) -> None:
     if db.query(User).count() == 0:
         db.add_all([
             User(id="U001", username="doctor", name="陈志远", role="doctor", dept="内科",
-                 title="主任医师", password_hash=hash_password("Doctor@123")),
+                 title="主任医师",
+                 password_hash=hash_password(_initial_password("SEED_DOCTOR_PASSWORD", DEMO_PASSWORDS["doctor"]))),
             User(id="U002", username="admin", name="王建国", role="admin", dept="信息科",
-                 title="系统管理员", password_hash=hash_password("Admin@123")),
+                 title="系统管理员",
+                 password_hash=hash_password(_initial_password("SEED_ADMIN_PASSWORD", DEMO_PASSWORDS["admin"]))),
         ])
 
     if db.query(Drug).count() == 0:

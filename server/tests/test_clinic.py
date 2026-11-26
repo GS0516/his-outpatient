@@ -1,4 +1,4 @@
-﻿"""门诊业务：划价、审查、提交事务、作废、模板、趋势。"""
+"""门诊业务：划价、审查、提交事务、作废、模板、趋势。"""
 import pytest
 
 
@@ -97,7 +97,7 @@ def test_submit_visit_transaction(client, doctor, admin):
 
 
 def test_void_forbidden_for_admin(client, doctor, admin):
-    r = client.post("/api/visits", json=visit_payload(patient_id="P202611003"), headers=doctor)
+    r = client.post("/api/visits", json=visit_payload(patient_id="P202611009"), headers=doctor)
     rx_id = r.json()["prescription"]["id"]
     assert client.post(f"/api/prescriptions/{rx_id}/void", json={"reason": "x"}, headers=admin).status_code == 403
 
