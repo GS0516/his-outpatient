@@ -316,3 +316,6 @@ body { min-height: 100dvh; }
 
 
 
+
+.login-card .link { background: none; color: var(--muted); padding: 0; font-size: 12px; }
+.login-card .link:hover { color: var(--brand); }

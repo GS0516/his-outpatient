@@ -44,7 +44,7 @@
   }
 
   /* 1. 未登录 → 登录页 */
-  const f1 = mount(); f1.style.width = W + 'px'; f1.src = '/'
+  const f1 = mount(); f1.style.width = W + 'px'; f1.src = '/#/login'
   await wait(1800)
   metrics(f1, '登录页')
   const loginCard = f1.contentDocument.querySelector('.login-card')
@@ -59,7 +59,7 @@
   if (!res.ok) { log('登录失败 ' + res.status); return }
   localStorage.setItem('his.token', (await res.json()).token)
 
-  const f2 = mount(); f2.src = '/'
+  const f2 = mount(); f2.src = '/#/app'
   await wait(2500)
   const d2 = f2.contentDocument
   const ok = metrics(f2, '工作台')
@@ -91,6 +91,11 @@
   log('[工作台] 患者卡可见=' + (d2.querySelector('.pt-card') ? 'YES' : 'no'))
   log('[工作台] 底部操作条按钮数=' + d2.querySelectorAll('.card .btn').length)
   log('结论：' + (ok ? '无页面级横向溢出' : '存在横向溢出，需要继续调整'))
+
+  const f3 = mount(); f3.src = '/'
+  await wait(1600)
+  metrics(f3, '首页')
+  log('[首页] 主标题=' + (f3.contentDocument.querySelector('h1')?.textContent.trim().slice(0, 30) || '缺失'))
 
   localStorage.removeItem('his.token')
 })()

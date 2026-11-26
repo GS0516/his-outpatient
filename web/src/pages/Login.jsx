@@ -6,7 +6,7 @@ const DEMO = [
   { u: 'admin', p: 'Admin@123', name: '管理员 · 王建国' },
 ]
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onHome }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')

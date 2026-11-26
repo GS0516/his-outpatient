@@ -66,12 +66,22 @@ docker compose up -d --build  # → http://localhost:8080
 
 ---
 
-## 三、移动端适配
+## 三、页面结构
+
+| 路由 | 页面 | 说明 |
+|---|---|---|
+| `#/` | 首页（Landing） | 产品介绍、11 条功能、就诊闭环、技术栈；未登录点「进入系统」跳登录 |
+| `#/login` | 登录 | 医生 / 管理员；已登录访问会自动跳工作台 |
+| `#/app` | 门诊医生工作站 | 未登录访问会自动跳登录 |
+
+> 直接访问根路径 `/` 会落在首页；所有路由都是前端 hash 路由，服务端只需 SPA 回退。
+
+## 四、移动端适配
 
 - 宽度 ≤760px：侧栏折叠为顶部横向导航；患者队列变为可横向滑动的卡片；处方/审计等明细表在自身容器内横向滚动，不撑破页面。
 - 登录页单列、弹层全宽、按钮触控高度 ≥38px；已用 `web/public/mobile-check.html?w=360|390|768` 自动校验无页面级横向溢出。
 
-## 四、API 一览
+## 五、API 一览
 
 | 方法 | 路径 | 说明 | 角色 |
 |---|---|---|---|
@@ -110,7 +120,7 @@ cd server && pytest -q          # 19 passed
 
 ---
 
-## 五、目录结构
+## 六、目录结构
 
 ```
 医院信息系统/
@@ -132,7 +142,7 @@ cd server && pytest -q          # 19 passed
 │  ├─ src/
 │  │  ├─ api.js            统一请求封装（Bearer Token、错误码）
 │  │  ├─ App.jsx           登录态路由
-│  │  ├─ pages/Login.jsx · Workstation.jsx
+│  │  ├─ pages/Home.jsx · Login.jsx · Workstation.jsx
 │  │  ├─ components/Modal.jsx
 │  │  └─ styles.css        亮色医疗蓝设计令牌与组件
 │  ├─ public/e2e-login.html  仅本地/CI 冒烟用的登录辅助页
@@ -145,7 +155,7 @@ cd server && pytest -q          # 19 passed
 
 ---
 
-## 六、部署与 CI
+## 七、部署与 CI
 
 - **完整步骤见 [`docs/部署手册.md`](docs/部署手册.md)**：本机没有 Docker 也能交（Render 单服务 / Vercel+Render / CI 推 GHCR / 本机 Docker 四条路线）。
 - **单镜像**：根目录 `Dockerfile` 先构建前端再把 `dist` 交给 FastAPI 托管，同域访问无 CORS，适合 Render 一键部署。
@@ -157,7 +167,7 @@ cd server && pytest -q          # 19 passed
 
 ---
 
-## 七、课程要求对照
+## 八、课程要求对照
 
 | 要求 | 落地 |
 |---|---|
@@ -175,7 +185,7 @@ cd server && pytest -q          # 19 passed
 
 ---
 
-## 八、边界说明
+## 九、边界说明
 
 - 库存扣减/收费/发药属于第十、十二章，本期不含；`POST /api/visits` 只生成“待收费处方”并传送。
 - 智能分诊默认走本地规则；配置 `AI_ENDPOINT` 后才调用大模型，失败/超时自动降级，界面固定展示免责声明。

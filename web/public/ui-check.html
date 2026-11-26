@@ -11,7 +11,7 @@
   const log = s => { out.push(s); document.getElementById('out').textContent = out.join('\n') }
   const wait = ms => new Promise(r => setTimeout(r, ms))
   localStorage.removeItem('his.token')
-  const f = document.createElement('iframe'); f.src = '/'; document.body.appendChild(f)
+  const f = document.createElement('iframe'); f.src = '/#/login'; document.body.appendChild(f)
   await wait(2000)
   const d = f.contentDocument
   const btn = [...d.querySelectorAll('button')].find(b => b.textContent.includes('登'))
